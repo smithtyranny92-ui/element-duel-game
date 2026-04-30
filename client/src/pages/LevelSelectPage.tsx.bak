@@ -1,0 +1,212 @@
+import { motion } from 'framer-motion';
+import { useMemo, useState } from 'react';
+import { useGame } from '../contexts/GameContext';
+import { LEVELS } from '../lib/levelData';
+
+interface Props {
+  onBack: () => void;
+}
+
+const CHAPTERS = [
+  { id: 1, roman: 'I' },
+  { id: 2, roman: 'II' },
+  { id: 3, roman: 'III' },
+  { id: 4, roman: 'IV' },
+];
+
+function ChapterRail({ activeChapter, onSelect }: { activeChapter: number; onSelect: (chapter: number) => void }) {
+  return (
+    <div
+      className="absolute left-0 top-0 h-full flex flex-col items-center justify-center"
+      style={{
+        width: 78,
+        background: 'rgba(28, 35, 35, 0.92)',
+        borderRight: '1px solid rgba(255,255,255,0.05)',
+        zIndex: 20,
+        pointerEvents: 'auto',
+      }}
+    >
+      <div className="flex flex-col items-center gap-8 w-full px-2">
+        {CHAPTERS.map(chapter => (
+          <button
+            key={chapter.id}
+            onClick={() => onSelect(chapter.id)}
+            style={{
+              width: '100%',
+              minHeight: 72,
+              borderRadius: 18,
+              background: chapter.id === activeChapter ? 'rgba(255,255,255,0.08)' : 'transparent',
+              border: chapter.id === activeChapter ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+              color: chapter.id === activeChapter ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.55)',
+              fontSize: '2rem',
+              fontWeight: 300,
+              lineHeight: 1,
+              letterSpacing: '0.06em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {chapter.roman}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StarRow({ stars }: { stars: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {[1, 2, 3].map(index => (
+        <span
+          key={index}
+          style={{
+            color: index <= stars ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.26)',
+            fontSize: '1.55rem',
+            lineHeight: 1,
+          }}
+        >
+          ☆
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LabIcon() {
+  return (
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        border: '1px solid rgba(255,255,255,0.12)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'rgba(255,255,255,0.72)',
+        fontSize: '1.1rem',
+      }}
+    >
+      ⚗
+    </div>
+  );
+}
+
+export default function LevelSelectPage({ onBack }: Props) {
+  const { startLevel, levelProgress } = useGame();
+  const [activeChapter, setActiveChapter] = useState(1);
+
+  const chapterLevels = useMemo(
+    () => LEVELS.filter(level => level.chapter === activeChapter),
+    [activeChapter],
+  );
+
+  return (
+    <div className="relative h-full overflow-hidden" style={{ width: '100%', height: '100%', minHeight: '100%', background: '#05090c' }}>
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: "url('/bg-levels.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(0.4px)',
+          transform: 'scale(1.03)',
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(180deg, rgba(1,5,7,0.78) 0%, rgba(1,9,11,0.74) 45%, rgba(1,7,10,0.88) 100%)',
+        }}
+      />
+
+      <ChapterRail activeChapter={activeChapter} onSelect={setActiveChapter} />
+
+      <div className="relative z-10 h-full" style={{ paddingLeft: 78, minHeight: '100%' }}>
+        <div className="flex items-center justify-center px-6 pt-7 pb-6 relative">
+          <button
+            onClick={onBack}
+            className="absolute left-4 top-6"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(255,255,255,0.92)',
+              fontSize: '2rem',
+              lineHeight: 1,
+            }}
+          >
+            ←
+          </button>
+          <div
+            style={{
+              color: '#ffffff',
+              fontSize: '1.45rem',
+              fontWeight: 400,
+              letterSpacing: '0.02em',
+            }}
+          >
+            关卡选择
+          </div>
+        </div>
+
+        <div className="px-4 pb-8 space-y-5 overflow-y-auto" style={{ maxHeight: 'calc(100% - 88px)' }}>
+          {chapterLevels.map((level, index) => {
+            const progress = levelProgress[level.id] ?? { completed: false, stars: 0, bestScore: 0 };
+            const unlocked = level.id === 1 || Boolean(levelProgress[level.id - 1]?.completed) || progress.completed || Boolean(level.unlocked);
+
+            return (
+              <motion.button
+                key={level.id}
+                onClick={() => unlocked && startLevel(level.id)}
+                className="w-full text-left"
+                style={{
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: unlocked ? 'rgba(43, 50, 50, 0.76)' : 'rgba(34, 38, 38, 0.55)',
+                  borderRadius: 30,
+                  padding: '18px 18px 16px 18px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.16)',
+                  opacity: unlocked ? 1 : 0.55,
+                  backdropFilter: 'blur(6px)',
+                }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: unlocked ? 1 : 0.55, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 pr-2">
+                    <div
+                      style={{
+                        color: 'rgba(255,255,255,0.96)',
+                        fontSize: '1rem',
+                        fontWeight: 500,
+                        marginBottom: 12,
+                      }}
+                    >
+                      {level.title}
+                    </div>
+                    <div
+                      style={{
+                        color: 'rgba(255,255,255,0.44)',
+                        fontSize: '0.73rem',
+                        lineHeight: 1.6,
+                        minHeight: 34,
+                      }}
+                    >
+                      {level.description}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end justify-between min-w-fit" style={{ minHeight: 88 }}>
+                    <StarRow stars={progress.stars ?? 0} />
+                    <LabIcon />
+                  </div>
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

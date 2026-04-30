@@ -1,0 +1,519 @@
+import { useMemo, useState } from 'react';
+import { CARD_MAP, FAMILY_COLORS, FAMILY_NAMES, type ElementCard } from '@/lib/cardData';
+
+type Props = {
+  onBack: () => void;
+};
+
+type CompendiumDetail = {
+  summary: string;
+  reaction: string;
+  usage: string;
+  tags: string[];
+};
+
+const ELEMENT_ORDER = [
+  'H2', 'O2', 'H2O', 'H', 'Na', 'K', 'Li', 'Cl2', 'Cl', 'NaCl', 'NaOH', 'HCl', 'H2SO4',
+  'CaCO3', 'Ca_OH_2', 'CO2', 'C', 'Fe', 'Fe2O3', 'Zn', 'Cu', 'Ag', 'Al', 'Ca', 'Mg',
+  'MnO2', 'Litmus', 'Ar', 'He',
+] as const;
+
+const FAMILY_ORDER = [
+  'reactive_nonmetal',
+  'metal',
+  'acid',
+  'base',
+  'salt',
+  'oxide',
+  'compound',
+  'catalyst',
+  'indicator',
+  'inert',
+] as const;
+
+const FAMILY_DESCRIPTIONS: Record<string, string> = {
+  reactive_nonmetal: '常见于燃烧、氧化和生成水等基础反应，是前期最核心的反应牌来源。',
+  metal: '多用于置换反应、与酸反应和活动性比较，是第三章的重要知识核心。',
+  acid: '擅长腐蚀、溶解与中和，是破除碳酸盐、铁锈和金属护甲的重要手段。',
+  base: '能与酸中和，也常用于吸收 CO₂ 或处理两性金属，兼具稳定与功能性。',
+  salt: '常作为反应产物或护盾材料出现，偏向衍生产物与结构类知识。',
+  oxide: '既可能是氧化产物，也可能是待还原对象，经常出现在 Boss 护甲设计中。',
+  compound: '兼具基础反应和辅助效果，是贯穿多章节的过渡型牌。',
+  catalyst: '不会直接替代主反应物，但能显著改变出牌节奏和连段效率。',
+  indicator: '偏信息型工具牌，用于揭示护甲、辅助判断而非直接输出。',
+  inert: '以稳定、惰性和特殊机制见长，通常不参与常规反应但能承担功能位。',
+};
+
+const DETAIL_OVERRIDES: Record<string, CompendiumDetail> = {
+  H2: {
+    summary: '氢气是最轻的可燃气体，常作为还原剂或燃烧反应参与者，是第一章的重要入门元素。',
+    reaction: '2H₂ + O₂ → 2H₂O',
+    usage: '适合处理氧气相关护甲，也常在氧化还原关卡中承担基础输出。',
+    tags: ['可燃气体', '还原剂', '第一章核心'],
+  },
+  O2: {
+    summary: '氧气支持燃烧，也是常见氧化剂。很多入门化学反应都围绕它展开。',
+    reaction: 'C + O₂ → CO₂；3Fe + 2O₂ → Fe₃O₄',
+    usage: '常用来理解燃烧、氧化和气体护甲，是早期判断“能否点燃/氧化”的关键牌。',
+    tags: ['氧化剂', '燃烧反应', '非金属'],
+  },
+  H2O: {
+    summary: '水不仅是溶剂，在游戏中还与活泼金属、恢复和衍生反应密切相关。',
+    reaction: '2Na + 2H₂O → 2NaOH + H₂↑',
+    usage: '在活泼金属关卡中很关键，也承担部分恢复与辅助定位。',
+    tags: ['溶剂', '恢复', '化合物'],
+  },
+  Na: {
+    summary: '钠是典型活泼金属，遇水剧烈反应。它代表了金属活动性的极端一侧。',
+    reaction: '2Na + 2H₂O → 2NaOH + H₂↑',
+    usage: '主要用于金属活动性、活泼金属判定和爆发型机制理解。',
+    tags: ['活泼金属', '活动性', '爆发'],
+  },
+  K: {
+    summary: '钾比钠更活泼，是活动性顺序中的高位金属，适合做“更强反应性”的教学示例。',
+    reaction: '2K + 2H₂O → 2KOH + H₂↑',
+    usage: '主要承担活动性对比认知，在图鉴中用于强化“同族越向下越活泼”的印象。',
+    tags: ['碱金属', '高活性', '活动性顺序'],
+  },
+  Li: {
+    summary: '锂是最轻的金属之一，常作为现代电池材料代表，也属于活泼金属体系。',
+    reaction: '2Li + 2H₂O → 2LiOH + H₂↑',
+    usage: '用于补齐碱金属认知，与 Na、K 共同构成活动性学习链。',
+    tags: ['碱金属', '电池材料', '金属'],
+  },
+  Cl2: {
+    summary: '氯气是强氧化性气体，兼具消毒和反应性，在氧化类和卤素知识中非常典型。',
+    reaction: '2Fe + 3Cl₂ → 2FeCl₃',
+    usage: '偏功能型输出牌，适合解释卤素、氧化性和点燃条件。',
+    tags: ['卤素', '氧化剂', '气体'],
+  },
+  NaOH: {
+    summary: '氢氧化钠是强碱，既可中和酸，也能吸收 CO₂，还能处理部分金属/两性物质。',
+    reaction: 'NaOH + HCl → NaCl + H₂O',
+    usage: '在酸碱中和、吸收二氧化碳和破碱系护甲时非常关键。',
+    tags: ['强碱', '中和', '吸收 CO₂'],
+  },
+  HCl: {
+    summary: '盐酸是最常见的强酸之一，能溶解碳酸盐、铁锈并与碱发生中和反应。',
+    reaction: 'CaCO₃ + 2HCl → CaCl₂ + H₂O + CO₂↑',
+    usage: '广泛用于酸性破甲、溶解类机制和通用输出，是高频核心牌。',
+    tags: ['强酸', '腐蚀', '高频核心'],
+  },
+  H2SO4: {
+    summary: '硫酸是工业上最重要的酸之一，代表高强度腐蚀与工业化学知识。',
+    reaction: 'H₂SO₄ + 2NaOH → Na₂SO₄ + 2H₂O',
+    usage: '在高阶酸性关卡中常作为强力破甲或工业化学主题牌使用。',
+    tags: ['工业之母', '强酸', '高阶关卡'],
+  },
+  CaCO3: {
+    summary: '碳酸钙是石灰石和贝壳的主要成分，遇酸分解，是碳酸盐体系的代表。',
+    reaction: 'CaCO₃ + 2HCl → CaCl₂ + H₂O + CO₂↑',
+    usage: '常作为护盾、碳酸盐护甲或石灰石循环的核心概念牌。',
+    tags: ['碳酸盐', '护盾', '石灰石循环'],
+  },
+  Ca_OH_2: {
+    summary: '氢氧化钙俗称熟石灰，能吸收 CO₂，也是“石灰水变浑浊”经典实验的主角。',
+    reaction: 'Ca(OH)₂ + CO₂ → CaCO₃↓ + H₂O',
+    usage: '在 CO₂ 处理和石灰石循环关卡中特别重要，兼具基础输出和知识辨识度。',
+    tags: ['熟石灰', '吸收 CO₂', '检验气体'],
+  },
+  CO2: {
+    summary: '二氧化碳是碳完全燃烧产物，也是酸性氧化物，能被碱或石灰水吸收。',
+    reaction: 'CO₂ + Ca(OH)₂ → CaCO₃↓ + H₂O',
+    usage: '常用于衔接燃烧、碳循环和酸性氧化物知识，是第二章核心概念之一。',
+    tags: ['酸性氧化物', '燃烧产物', '碳循环'],
+  },
+  C: {
+    summary: '碳既能燃烧，也能在高温下还原金属氧化物，是氧化还原与工业化学的关键角色。',
+    reaction: 'C + O₂ → CO₂；Fe₂O₃ + 3C → 2Fe + 3CO₂',
+    usage: '既能承担燃烧路线，也能进入还原路线，是高阶关卡常见关键牌。',
+    tags: ['还原剂', '燃烧', '工业化学'],
+  },
+  Fe: {
+    summary: '铁是金属活动性教学中的中位金属，也是锈蚀、置换和工业炼铁的中心元素。',
+    reaction: 'Fe + CuSO₄ → FeSO₄ + Cu',
+    usage: '主要用于置换反应、金属对比和氧化还原教学。',
+    tags: ['金属活动性', '置换', '铁系主题'],
+  },
+  Fe2O3: {
+    summary: '氧化铁是铁锈主要成分，可被酸溶解，也可被碳、氢气等还原剂还原。',
+    reaction: 'Fe₂O₃ + 3CO → 2Fe + 3CO₂',
+    usage: '经常作为 Boss 护甲和知识关卡中的“待还原对象”出现。',
+    tags: ['铁锈', '氧化物', '待还原'],
+  },
+  Zn: {
+    summary: '锌比铁更活泼，是置换反应中常用的“更强金属”示例。',
+    reaction: 'Zn + H₂SO₄ → ZnSO₄ + H₂↑',
+    usage: '适合用于活动性顺序和金属置换链的教学与破甲判断。',
+    tags: ['置换反应', '较活泼金属', '酸反应'],
+  },
+  Cu: {
+    summary: '铜活动性较弱，常作为被置换对象出现，是金属活动性顺序的重要参照点。',
+    reaction: 'Fe + CuSO₄ → FeSO₄ + Cu',
+    usage: '多用于“谁能置换谁”的教学判断。',
+    tags: ['弱活性金属', '参照元素', '置换对象'],
+  },
+  Al: {
+    summary: '铝是典型两性金属，既能与酸反应也能与碱反应，是中高阶关卡的重要转折点。',
+    reaction: '2Al + 2NaOH + 2H₂O → 2NaAlO₂ + 3H₂↑',
+    usage: '用于讲解“两性金属”与酸碱双解法，是很有辨识度的特殊金属牌。',
+    tags: ['两性金属', '酸碱双解', '中高阶'],
+  },
+  MnO2: {
+    summary: '二氧化锰是经典催化剂，自己不被消耗，却能改变整个回合的出牌效率。',
+    reaction: '2H₂O₂ →(MnO₂) 2H₂O + O₂↑',
+    usage: '主要承担催化、连段和节奏优化功能，是操作感最强的功能牌之一。',
+    tags: ['催化剂', '连段', '节奏牌'],
+  },
+  Litmus: {
+    summary: '石蕊不是输出牌，而是判断酸碱性的重要指示剂，在信息博弈中价值很高。',
+    reaction: '酸性变红，碱性变蓝',
+    usage: '适合探测护甲属性、减少误判，是典型信息型辅助牌。',
+    tags: ['指示剂', '信息辅助', '酸碱判断'],
+  },
+  Ar: {
+    summary: '氩气化学性质稳定，在游戏中更像“惰性保护位”，常承担防守或特殊机制。',
+    reaction: '常规条件下不参与反应',
+    usage: '适合承担护盾、缓冲与机制位，而不是直接反应输出。',
+    tags: ['稀有气体', '惰性', '防守位'],
+  },
+  He: {
+    summary: '氦气是最轻的稀有气体，几乎不参与常规反应，更偏知识补完型元素。',
+    reaction: '常规条件下不参与反应',
+    usage: '用于补齐稀有气体认知，强化“惰性元素”的整体概念。',
+    tags: ['稀有气体', '惰性', '知识补完'],
+  },
+};
+
+function getSkillLabel(card: ElementCard) {
+  const labels: Record<string, string> = {
+    none: '无主动技能',
+    catalyze: '催化连段',
+    reveal: '揭示护甲',
+    neutralize: '中和/碱性处理',
+    corrode: '腐蚀/酸性处理',
+    shield: '生成护盾',
+    recover: '回复/衍生',
+  };
+  return labels[card.skill] ?? '特殊技能';
+}
+
+function buildDetail(card: ElementCard): CompendiumDetail {
+  const override = DETAIL_OVERRIDES[card.id];
+  if (override) return override;
+
+  const familyName = FAMILY_NAMES[card.family] ?? '元素';
+  const breaksArmor = card.breaksArmor?.length ? `可关联护甲：${card.breaksArmor.join('、')}` : '当前版本暂无明确护甲列表，主要作为通用知识或辅助牌使用。';
+
+  return {
+    summary: `${card.name} 属于${familyName}，在本作中更偏向${getSkillLabel(card)}与基础反应学习。`,
+    reaction: card.equation || card.reactionEquation || '当前图鉴尚未为该条目补入专属方程式，但已纳入完整分类浏览。',
+    usage: `${breaksArmor} 基础伤害为 ${card.coreDamage}，适合与同族或相邻知识点一起记忆。`,
+    tags: [familyName, getSkillLabel(card), `伤害 ${card.coreDamage}`],
+  };
+}
+
+function ElementBadge({ text }: { text: string }) {
+  return (
+    <span
+      style={{
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: 'rgba(255,255,255,0.06)',
+        color: 'rgba(255,255,255,0.84)',
+        fontSize: '0.72rem',
+        fontWeight: 600,
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+export default function ElementCollectionPage({ onBack }: Props) {
+  const cards = useMemo(
+    () => ELEMENT_ORDER.map((id) => CARD_MAP[id]).filter(Boolean),
+    []
+  );
+
+  const [selectedFamily, setSelectedFamily] = useState<string>('all');
+  const [selectedId, setSelectedId] = useState<string>(cards[0]?.id ?? 'H2');
+
+  const familyCounts = useMemo(() => {
+    const counter: Record<string, number> = {};
+    cards.forEach((card) => {
+      counter[card.family] = (counter[card.family] ?? 0) + 1;
+    });
+    return counter;
+  }, [cards]);
+
+  const visibleCards = useMemo(() => {
+    return selectedFamily === 'all'
+      ? cards
+      : cards.filter((card) => card.family === selectedFamily);
+  }, [cards, selectedFamily]);
+
+  const selectedCard = visibleCards.find((card) => card.id === selectedId) ?? cards.find((card) => card.id === selectedId) ?? cards[0];
+  const selectedDetail = buildDetail(selectedCard);
+  const familyColor = FAMILY_COLORS[selectedCard.family] ?? FAMILY_COLORS.compound;
+
+  return (
+    <div
+      className="relative h-full overflow-hidden"
+      style={{
+        width: '100%',
+        height: '100%',
+        minHeight: '100%',
+        background: 'linear-gradient(180deg, #041018 0%, #07161f 48%, #050c12 100%)',
+        color: '#fff',
+      }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'radial-gradient(circle at 50% 14%, rgba(34,211,238,0.14) 0%, transparent 28%), radial-gradient(circle at 82% 78%, rgba(59,130,246,0.10) 0%, transparent 26%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div className="relative z-10 h-full flex flex-col" style={{ minHeight: '100%' }}>
+        <div className="flex items-center justify-between px-4 pt-5 pb-3">
+          <button
+            onClick={onBack}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.05)',
+              color: 'rgba(255,255,255,0.88)',
+              fontSize: '1rem',
+            }}
+          >
+            ←
+          </button>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '1.16rem', fontWeight: 800, letterSpacing: '0.08em' }}>元素图鉴</div>
+            <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.48)', marginTop: 2 }}>ELEMENT COMPENDIUM</div>
+          </div>
+
+          <div
+            style={{
+              minWidth: 54,
+              height: 30,
+              borderRadius: 999,
+              background: 'rgba(34,211,238,0.10)',
+              border: '1px solid rgba(34,211,238,0.18)',
+              color: '#a5f3fc',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {cards.length} 项
+          </div>
+        </div>
+
+        <div className="px-4">
+          <div
+            style={{
+              borderRadius: 22,
+              padding: '14px 14px 12px',
+              background: 'linear-gradient(180deg, rgba(9,21,30,0.92) 0%, rgba(7,16,24,0.88) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 16px 36px rgba(0,0,0,0.26)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: `linear-gradient(180deg, ${familyColor.primary}33 0%, ${familyColor.secondary}26 100%)`,
+                  border: `1px solid ${familyColor.primary}44`,
+                  color: familyColor.primary,
+                  fontSize: '1.6rem',
+                  fontWeight: 900,
+                  boxShadow: `0 0 18px ${familyColor.glow}22`,
+                }}
+              >
+                {selectedCard.symbol}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: 'rgba(255,255,255,0.94)' }}>{selectedCard.name}</div>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.48)', marginTop: 2 }}>{FAMILY_NAMES[selectedCard.family] ?? '元素'} · {selectedCard.id}</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.78)', fontSize: '0.78rem', lineHeight: 1.7 }}>
+              {selectedDetail.summary}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <ElementBadge text={`基础伤害 ${selectedCard.coreDamage}`} />
+              <ElementBadge text={getSkillLabel(selectedCard)} />
+              {selectedDetail.tags.slice(0, 2).map((tag) => (
+                <ElementBadge key={tag} text={tag} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 pt-3">
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+            <button
+              onClick={() => setSelectedFamily('all')}
+              style={{
+                flexShrink: 0,
+                padding: '7px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.10)',
+                background: selectedFamily === 'all' ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.86)',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+              }}
+            >
+              全部 {cards.length}
+            </button>
+            {FAMILY_ORDER.filter((family) => familyCounts[family]).map((family) => (
+              <button
+                key={family}
+                onClick={() => {
+                  setSelectedFamily(family);
+                  const nextCard = cards.find((card) => card.family === family);
+                  if (nextCard) setSelectedId(nextCard.id);
+                }}
+                style={{
+                  flexShrink: 0,
+                  padding: '7px 12px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: selectedFamily === family ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.82)',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                }}
+              >
+                {FAMILY_NAMES[family]} {familyCounts[family]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-4 pt-3 pb-4 overflow-y-auto" style={{ flex: 1 }}>
+          <div
+            style={{
+              borderRadius: 22,
+              padding: '14px',
+              background: 'rgba(8,15,22,0.82)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.68rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              分类说明
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.76)', fontSize: '0.76rem', lineHeight: 1.7, marginTop: 8 }}>
+              {selectedFamily === 'all'
+                ? '图鉴已补齐为完整可浏览页。你可以先按分类筛选，再点开任意条目查看核心反应、用途与记忆标签。'
+                : FAMILY_DESCRIPTIONS[selectedFamily]}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12 }}>
+            {visibleCards.map((card) => {
+              const colors = FAMILY_COLORS[card.family] ?? FAMILY_COLORS.compound;
+              const active = card.id === selectedCard.id;
+              return (
+                <button
+                  key={card.id}
+                  onClick={() => setSelectedId(card.id)}
+                  style={{
+                    textAlign: 'left',
+                    borderRadius: 18,
+                    padding: '12px 12px 11px',
+                    border: active ? `1px solid ${colors.primary}66` : '1px solid rgba(255,255,255,0.08)',
+                    background: active
+                      ? `linear-gradient(180deg, ${colors.primary}22 0%, rgba(8,16,24,0.92) 100%)`
+                      : 'linear-gradient(180deg, rgba(12,22,30,0.92) 0%, rgba(7,14,21,0.92) 100%)',
+                    boxShadow: active ? `0 0 18px ${colors.glow}24` : 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ color: colors.primary, fontSize: '1.4rem', fontWeight: 900, lineHeight: 1 }}>{card.symbol}</div>
+                    <div
+                      style={{
+                        minWidth: 28,
+                        height: 22,
+                        borderRadius: 999,
+                        background: 'rgba(255,255,255,0.08)',
+                        color: 'rgba(255,255,255,0.66)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {card.coreDamage}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.92)', fontSize: '0.84rem', fontWeight: 700 }}>{card.name}</div>
+                  <div style={{ marginTop: 4, color: 'rgba(255,255,255,0.46)', fontSize: '0.68rem' }}>{FAMILY_NAMES[card.family]}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              borderRadius: 22,
+              padding: '14px',
+              background: 'linear-gradient(180deg, rgba(8,18,28,0.96) 0%, rgba(5,11,18,0.96) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ color: 'rgba(255,255,255,0.92)', fontWeight: 800, fontSize: '0.94rem' }}>核心反应</div>
+                <div style={{ color: 'rgba(255,255,255,0.34)', fontSize: '0.66rem', marginTop: 2 }}>REACTION NOTE</div>
+              </div>
+              <ElementBadge text={selectedCard.id} />
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                borderRadius: 16,
+                padding: '12px 12px 10px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <div style={{ color: '#a5f3fc', fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.7 }}>{selectedDetail.reaction}</div>
+            </div>
+
+            <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.78)', fontSize: '0.78rem', lineHeight: 1.75 }}>
+              {selectedDetail.usage}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              {selectedDetail.tags.map((tag) => (
+                <ElementBadge key={tag} text={tag} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
